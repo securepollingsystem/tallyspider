@@ -1,14 +1,14 @@
 package main
 
 import (
-    "fmt"
-    // "net/http"
+    // "fmt"
     "io/ioutil"
     "crypto/sha256"
-    "github.com/btcsuite/btcec"
-    "github.com/btcsuite/btcwire"
-
-    // "github.com/PuerkitoBio/fetchbot"
+    "regexp"
+    "strings"
+    "github.com/btcsuite/btcd/btcec"
+    b64 "encoding/base64"
+    // "github.com/PuerktoBio/fetchbot"
 )
 
 
@@ -18,51 +18,77 @@ func check(e error) {
     }
 }
 
+var screedPrefix = `-----BEGIN SPS SCREED TXT-----`
+var screedSuffix= `-----END SPS TXT SCREED-----`
+var screedSigPrefix = `-----BEGIN SPS SCREED SIG-----`
+var screedSigSuffix = `-----END SPS SCREED SIG-----`
 
 
 
-func signMessage(message string , pkBytes [32]byte ) []byte {
-	privKey, pubKey := btcec.PrivKeyFromBytes(btcec.S256(), pkBytes[0:])
+func TrimHeaderFooter(screedText string) string {
+  
+  tmpString := strings.TrimPrefix(screedText, screedPrefix+"\n")
+  return strings.TrimSuffix(tmpString,"\n"+screedSuffix)
+  
+  }
 
-	// Sign a message using the private key.
-	messageHash := btcwire.DoubleSha256([]byte(message))
-	signature, err := privKey.Sign(messageHash)
-  check(err)
-
-	// Serialize and display the signature.
-	//
-	// NOTE: This is commented out for the example since the signature
-	// produced uses random numbers and therefore will always be different.
-	//fmt.Printf("Serialized Signature: %x\n", signature.Serialize())
-
-	// Verify the signature for the message using the public key.
-	verified := signature.Verify(messageHash, pubKey)
-	fmt.Printf("Signature Verified? %v\n", verified)
-
-	// Output:
-	// Signature Verified? true
-  return signature.Serialize()
-
-
-}
-
+func EncodeToString(chunks ...[]byte) string{
+  var stringSum string
+  
+  for _, chunk := range chunks {
+    stringSum = stringSum + b64.StdEncoding.EncodeToString(chunk)
+    }
+  
+  return stringSum
+  }
 
 
 
 func main() {
   
-    seedBytes := []byte("A hella insecure key")
-    pkBytes := sha256.Sum256(seedBytes)
   
-    screed, err := ioutil.ReadFile("example_screed.txt")
+  
+  screedReg, err := regexp.Compile(screedPrefix +`[\s\S]+?` + screedSuffix)
+  check(err)
+  
+  screedBegin :="-----BEGIN SPS SCREED TXT-----\nI really like ice cream\n-----END SPS TXT SCREED-----"
+  
+  screedText := screedReg.FindString(screedBegin)
+
+  screedHash := sha256.Sum256([]byte(screedText))
+  
+  
+  regPkBytes := sha256.Sum256([]byte("This is Registrar key seed"))
+  
+  pkBytes := sha256.Sum256([]byte("My key seed"))
+  
+  privKey, pubKey := btcec.PrivKeyFromBytes(btcec.S256(), pkBytes[:])
+  
+  regPrivKey, regPubKey := btcec.PrivKeyFromBytes(btcec.S256(), regPkBytes[:])
+  
+  pubKeySig, err := regPrivKey.Sign(pubKey.SerializeCompressed())
+  check(err)
+  
+  screedSig, err := privKey.Sign(screedHash[:])
+  check(err)
+
+  payload := EncodeToString(screedSig.Serialize(), pubKey.SerializeCompressed(), pubKeySig.Serialize(), regPubKey.SerializeCompressed())
+  
+  dataForFile := screedBegin + "\n" + screedSigPrefix +"\n" + payload + "\n" + screedSigSuffix
+
+  err = ioutil.WriteFile("example_screed.txt", []byte(dataForFile), 0644)
+  check(err)
+
+
+
+    // screed, err := ioutil.ReadFile("example_screed.txt")
+    // check(err)
     
-    check(err)
-    sigBytes := signMessage(string(screed), pkBytes)
-    fmt.Printf("Signature: %x", sigBytes)
-    err = ioutil.WriteFile("example_screed.txt.sig",sigBytes , 0644)
-    check(err)
+    // signature, err := ioutil.ReadFile("example_screed.txt.sig")
+    // check(err)
   
-  
+    // pubverifySignature(signature, screed)
+    // fmt.Printf("PubKey: %v")
   
     // f := fetchbot.New(fetchbot.HandlerFunc(handler))
     // queue := f.Start()

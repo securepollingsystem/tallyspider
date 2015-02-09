@@ -1,1 +1,6 @@
-Down with bagels.
+-----BEGIN SPS SCREED TXT-----
+I really like ice cream
+-----END SPS TXT SCREED-----
+-----BEGIN SPS SCREED SIG-----
+MEQCIGTsNmvGiEF9iuXgADrsgt82UpGwbr64AUg81mtE1vmgAiA/oQUBf9X29wQ6lMxBSorvzna/pQoIASUrxYp0hvqqmw==AnWerv1jWc6FTZh2EYSRA6qyPF2IsCyeyG7tNKyDPOzNMEUCIQD9EyqQ1b9xclpabpATTKiOrNy7CH8g89vl/hu869M9CgIgQTyc1F99gfM8BiQua0mJKNM/zPP1UE5GficuETUflK0=A1KQRD0oEkc/C11ZPxwLToJi5M2mNd0BrTIpMcnBs/9y
+-----END SPS SCREED SIG-----
