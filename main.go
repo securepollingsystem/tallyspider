@@ -1,99 +1,190 @@
 package main
 
 import (
-    // "fmt"
-    "io/ioutil"
-    "crypto/sha256"
-    "regexp"
-    "strings"
-    "github.com/btcsuite/btcd/btcec"
-    b64 "encoding/base64"
-    // "github.com/PuerktoBio/fetchbot"
+	"crypto/sha256"
+	b64 "encoding/base64"
+	"fmt"
+	"github.com/btcsuite/btcd/btcec"
+	"io/ioutil"
+	"regexp"
+	"strings"
+	// "github.com/PuerktoBio/fetchbot"
+	"github.com/golang/protobuf/proto"
+	"github.com/securepollingsystem/tallyspider/protos"
 )
 
-
 func check(e error) {
-    if e != nil {
-        panic(e)
-    }
+	if e != nil {
+		panic(e)
+	}
 }
 
 var screedPrefix = `-----BEGIN SPS SCREED TXT-----`
-var screedSuffix= `-----END SPS TXT SCREED-----`
+var screedSuffix = `-----END SPS TXT SCREED-----`
 var screedSigPrefix = `-----BEGIN SPS SCREED SIG-----`
 var screedSigSuffix = `-----END SPS SCREED SIG-----`
+var serializedSigLength = 71
+var serializedKeyLength = 33
 
+type Screed struct {
+	screedText      string
+	screedSig       btcec.Signature
+	voterPubKey     btcec.PublicKey
+	registrarSig    btcec.Signature
+	registrarPubKey btcec.PublicKey
+}
 
+func TrimScreedHeaderFooter(screedText string) string {
 
-func TrimHeaderFooter(screedText string) string {
-  
-  tmpString := strings.TrimPrefix(screedText, screedPrefix+"\n")
-  return strings.TrimSuffix(tmpString,"\n"+screedSuffix)
-  
-  }
+	tmpString := strings.TrimPrefix(screedText, screedPrefix+"\n")
+	return strings.TrimSuffix(tmpString, "\n"+screedSuffix)
 
-func EncodeToString(chunks ...[]byte) string{
-  var stringSum string
-  
-  for _, chunk := range chunks {
-    stringSum = stringSum + b64.StdEncoding.EncodeToString(chunk)
-    }
-  
-  return stringSum
-  }
+}
 
+func TrimScreedSigHeaderFooter(screedSigText string) string {
 
+	tmpString := strings.TrimPrefix(screedSigText, screedSigPrefix+"\n")
+	return strings.TrimSuffix(tmpString, "\n"+screedSigSuffix)
+
+}
+
+func EncodeToString(chunks ...[]byte) string {
+	var stringSum string
+
+	for _, chunk := range chunks {
+		stringSum = stringSum + b64.StdEncoding.EncodeToString(chunk)
+	}
+
+	return stringSum
+}
+
+func DeserializeScreed(screedString string) Screed {
+	screedRegExp, err := regexp.Compile(screedPrefix + `[\s\S]+?` + screedSuffix)
+	if err != nil {
+		panic(err)
+	}
+
+	screedSigRegExp, err := regexp.Compile(screedSigPrefix + `[\s\S]+?` + screedSigSuffix)
+	if err != nil {
+		panic(err)
+	}
+
+	screedText := TrimScreedHeaderFooter(screedRegExp.FindString(screedString))
+	screedSigText := TrimScreedSigHeaderFooter(screedSigRegExp.FindString(screedString))
+
+	screedBytes, err := b64.StdEncoding.DecodeString(screedSigText)
+	if err != nil {
+		panic(err)
+	}
+
+	screedBuf := &securepollingsystem.Screed{}
+	err = proto.Unmarshal(screedBytes, screedBuf)
+	if err != nil {
+		panic(err)
+	}
+
+	screedSig, err := btcec.ParseSignature([]byte(*screedBuf.ScreedSig), btcec.S256())
+	if err != nil {
+		panic(err)
+	}
+	voterPubKey, err := btcec.ParsePubKey([]byte(*screedBuf.VoterPubKey), btcec.S256())
+
+	if err != nil {
+		panic(err)
+	}
+	screedHash := sha256.Sum256([]byte(screedText))
+
+	if !screedSig.Verify(screedHash[:], voterPubKey) {
+		panic("Invalid Signature of Screed")
+	}
+
+	registrarSig, err := btcec.ParseSignature([]byte(*screedBuf.RegistrarSig), btcec.S256())
+
+	if err != nil {
+		panic(err)
+	}
+
+	//TO DO check if we accept this registrars public key
+	registrarPubKey, err := btcec.ParsePubKey([]byte(*screedBuf.RegistrarPubKey), btcec.S256())
+
+	pubKeyHash := sha256.Sum256(voterPubKey.SerializeCompressed())
+
+	if !registrarSig.Verify(pubKeyHash[:], registrarPubKey) {
+		panic("Invalid Signature of Voter Pub Key")
+	}
+
+	return Screed{screedText, *screedSig, *voterPubKey, *registrarSig, *registrarPubKey}
+}
+
+func (screed *Screed) Serialize() string {
+
+	screedBuf := &securepollingsystem.Screed{
+		ScreedSig:       proto.String(string(screed.screedSig.Serialize())),
+		VoterPubKey:     proto.String(string(screed.voterPubKey.SerializeCompressed())),
+		RegistrarSig:    proto.String(string(screed.registrarSig.Serialize())),
+		RegistrarPubKey: proto.String(string(screed.registrarPubKey.SerializeCompressed())),
+	}
+	payloadBytes, _ := proto.Marshal(screedBuf)
+
+	payload := EncodeToString(payloadBytes)
+
+	// payload := EncodeToString(screed.screedSig.Serialize(), screed.voterPubKey.SerializeCompressed(), screed.registrarSig.Serialize(), regPubKey.SerializeCompressed())
+
+	return screedPrefix + "\n" + screed.screedText + "\n" + screedSuffix + "\n" + screedSigPrefix + "\n" + payload + "\n" + screedSigSuffix
+}
 
 func main() {
-  
-  
-  
-  screedReg, err := regexp.Compile(screedPrefix +`[\s\S]+?` + screedSuffix)
-  check(err)
-  
-  screedBegin :="-----BEGIN SPS SCREED TXT-----\nI really like ice cream\n-----END SPS TXT SCREED-----"
-  
-  screedText := screedReg.FindString(screedBegin)
 
-  screedHash := sha256.Sum256([]byte(screedText))
-  
-  
-  regPkBytes := sha256.Sum256([]byte("This is Registrar key seed"))
-  
-  pkBytes := sha256.Sum256([]byte("My key seed"))
-  
-  privKey, pubKey := btcec.PrivKeyFromBytes(btcec.S256(), pkBytes[:])
-  
-  regPrivKey, regPubKey := btcec.PrivKeyFromBytes(btcec.S256(), regPkBytes[:])
-  
-  pubKeySig, err := regPrivKey.Sign(pubKey.SerializeCompressed())
-  check(err)
-  
-  screedSig, err := privKey.Sign(screedHash[:])
-  check(err)
+	screedText := "I really like ice cream\n"
 
-  payload := EncodeToString(screedSig.Serialize(), pubKey.SerializeCompressed(), pubKeySig.Serialize(), regPubKey.SerializeCompressed())
-  
-  dataForFile := screedBegin + "\n" + screedSigPrefix +"\n" + payload + "\n" + screedSigSuffix
+	screedHash := sha256.Sum256([]byte(screedText))
 
-  err = ioutil.WriteFile("example_screed.txt", []byte(dataForFile), 0644)
-  check(err)
+	regPkBytes := sha256.Sum256([]byte("This is Registrar key seed"))
 
+	pkBytes := sha256.Sum256([]byte("My key seed"))
 
+	privKey, pubKey := btcec.PrivKeyFromBytes(btcec.S256(), pkBytes[:])
 
-    // screed, err := ioutil.ReadFile("example_screed.txt")
-    // check(err)
-    
-    // signature, err := ioutil.ReadFile("example_screed.txt.sig")
-    // check(err)
-  
-    // pubverifySignature(signature, screed)
-    // fmt.Printf("PubKey: %v")
-  
-    // f := fetchbot.New(fetchbot.HandlerFunc(handler))
-    // queue := f.Start()
-    // queue.SendStringHead("http://google.com", "http://golang.org", "http://golang.org/doc")
-    // queue.Close()
+	regPrivKey, regPubKey := btcec.PrivKeyFromBytes(btcec.S256(), regPkBytes[:])
+
+	pubKeyHash := sha256.Sum256(pubKey.SerializeCompressed())
+
+	pubKeySig, err := regPrivKey.Sign(pubKeyHash[:])
+	check(err)
+
+	screedSig, err := privKey.Sign(screedHash[:])
+	check(err)
+	fmt.Println(len(screedSig.Serialize()))
+	fmt.Println(len(pubKey.SerializeCompressed()))
+	fmt.Println(len(pubKeySig.Serialize()))
+	fmt.Println(len(regPubKey.SerializeCompressed()))
+
+	screedObj := Screed{screedText, *screedSig, *pubKey, *pubKeySig, *regPubKey}
+	dataForFile := screedObj.Serialize()
+
+	screedObj2 := DeserializeScreed(dataForFile)
+	screedObj3 := DeserializeScreed(screedObj2.Serialize())
+
+	fmt.Println(screedObj)
+	fmt.Println(screedObj2)
+	fmt.Println(screedObj3)
+
+	err = ioutil.WriteFile("example_screed.txt", []byte(dataForFile), 0644)
+	check(err)
+
+	// screed, err := ioutil.ReadFile("example_screed.txt")
+	// check(err)
+
+	// signature, err := ioutil.ReadFile("example_screed.txt.sig")
+	// check(err)
+
+	// pubverifySignature(signature, screed)
+	// fmt.Printf("PubKey: %v")
+
+	// f := fetchbot.New(fetchbot.HandlerFunc(handler))
+	// queue := f.Start()
+	// queue.SendStringHead("http://google.com", "http://golang.org", "http://golang.org/doc")
+	// queue.Close()
 }
 
 // func handler(ctx *fetchbot.Context, res *http.Response, err error) {
@@ -103,4 +194,3 @@ func main() {
 //     }
 //     fmt.Printf("[%d] %s %s\n", res.StatusCode, ctx.Cmd.Method(), ctx.Cmd.URL())
 // }
-

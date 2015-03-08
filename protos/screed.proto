@@ -1,0 +1,8 @@
+package securepollingsystem;
+
+message Screed {
+  required string screedSig  = 1;
+  required string voterPubKey  = 2;
+  required string registrarSig  = 3;
+  required string registrarPubKey  = 4;
+}
