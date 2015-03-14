@@ -13,8 +13,9 @@ import (
 	"github.com/securepollingsystem/tallyspider/protos"
 )
 
-func check(e error) {
+func check(e error, function string) {
 	if e != nil {
+                fmt.Println("Panic during "+function)
 		panic(e)
 	}
 }
@@ -58,15 +59,15 @@ func EncodeToString(chunks ...[]byte) string {
 	return stringSum
 }
 
-func DeserializeScreed(screedString string) Screed {
+func DeserializeScreed(screedString string) (*Screed, error, errorcause string) {
 	screedRegExp, err := regexp.Compile(screedPrefix + `[\s\S]+?` + screedSuffix)
 	if err != nil {
-		panic(err)
+		return nil, err, "regexp.Compile(screedPrefix + `[\\s\\S]+?` + screedSuffix)"
 	}
 
 	screedSigRegExp, err := regexp.Compile(screedSigPrefix + `[\s\S]+?` + screedSigSuffix)
 	if err != nil {
-		panic(err)
+		return nil, err, "regexp.Compile(screedSigPrefix + `[\\s\\S]+?` + screedSigSuffix)"
 	}
 
 	screedText := TrimScreedHeaderFooter(screedRegExp.FindString(screedString))
@@ -74,46 +75,46 @@ func DeserializeScreed(screedString string) Screed {
 
 	screedBytes, err := b64.StdEncoding.DecodeString(screedSigText)
 	if err != nil {
-		panic(err)
+		return nil, err, "b64.StdEncoding.DecodeString(screedSigText)"
 	}
 
 	screedBuf := &securepollingsystem.Screed{}
 	err = proto.Unmarshal(screedBytes, screedBuf)
 	if err != nil {
-		panic(err)
+		return nil, err, "proto.Unmarshal(screedBytes, screedBuf)"
 	}
 
 	screedSig, err := btcec.ParseSignature([]byte(*screedBuf.ScreedSig), btcec.S256())
 	if err != nil {
-		panic(err)
+		return nil, err, "btcec.ParseSignature([]byte(*screedBuf.ScreedSig), btcec.S256())"
 	}
-	voterPubKey, err := btcec.ParsePubKey([]byte(*screedBuf.VoterPubKey), btcec.S256())
 
+	voterPubKey, err := btcec.ParsePubKey([]byte(*screedBuf.VoterPubKey), btcec.S256())
 	if err != nil {
-		panic(err)
+		return nil, err, "btcec.ParsePubKey([]byte(*screedBuf.VoterPubKey), btcec.S256())"
 	}
 	screedHash := sha256.Sum256([]byte(screedText))
-
 	if !screedSig.Verify(screedHash[:], voterPubKey) {
-		panic("Invalid Signature of Screed")
+		return nil, nil, "Invalid Signature of Screed"
 	}
 
 	registrarSig, err := btcec.ParseSignature([]byte(*screedBuf.RegistrarSig), btcec.S256())
-
 	if err != nil {
-		panic(err)
+		return nil, err, "btcec.ParseSignature([]byte(*screedBuf.RegistrarSig), btcec.S256())"
 	}
 
 	//TO DO check if we accept this registrars public key
 	registrarPubKey, err := btcec.ParsePubKey([]byte(*screedBuf.RegistrarPubKey), btcec.S256())
-
-	pubKeyHash := sha256.Sum256(voterPubKey.SerializeCompressed())
-
-	if !registrarSig.Verify(pubKeyHash[:], registrarPubKey) {
-		panic("Invalid Signature of Voter Pub Key")
+	if err != nil {
+		return nil, err, "btcec.ParsePubKey([]byte(*screedBuf.RegistrarPubKey), btcec.S256())"
 	}
 
-	return Screed{screedText, *screedSig, *voterPubKey, *registrarSig, *registrarPubKey}
+	pubKeyHash := sha256.Sum256(voterPubKey.SerializeCompressed())
+	if !registrarSig.Verify(pubKeyHash[:], registrarPubKey) {
+		return nil, nil, "Invalid Signature of Voter Pub Key"
+	}
+
+	return &Screed{screedText, *screedSig, *voterPubKey, *registrarSig, *registrarPubKey}, nil, ""
 }
 
 func (screed *Screed) Serialize() string {
@@ -150,10 +151,10 @@ func main() {
 	pubKeyHash := sha256.Sum256(pubKey.SerializeCompressed())
 
 	pubKeySig, err := regPrivKey.Sign(pubKeyHash[:])
-	check(err)
+	check(err,"regPrivKey.Sign(pubKeyHash[:])")
 
 	screedSig, err := privKey.Sign(screedHash[:])
-	check(err)
+	check(err,"privKey.Sign(screedHash[:])")
 	fmt.Println(len(screedSig.Serialize()))
 	fmt.Println(len(pubKey.SerializeCompressed()))
 	fmt.Println(len(pubKeySig.Serialize()))
@@ -162,15 +163,17 @@ func main() {
 	screedObj := Screed{screedText, *screedSig, *pubKey, *pubKeySig, *regPubKey}
 	dataForFile := screedObj.Serialize()
 
-	screedObj2 := DeserializeScreed(dataForFile)
-	screedObj3 := DeserializeScreed(screedObj2.Serialize())
+	screedObj2, err, errstring := DeserializeScreed(dataForFile)
+	check(err,errstring)
+	screedObj3, err, errstring := DeserializeScreed(screedObj2.Serialize())
+	check(err,errstring)
 
 	fmt.Println(screedObj)
 	fmt.Println(screedObj2)
 	fmt.Println(screedObj3)
 
 	err = ioutil.WriteFile("example_screed.txt", []byte(dataForFile), 0644)
-	check(err)
+	check(err,"ioutil.WriteFile(\"example_screed.txt\", []byte(dataForFile), 0644)")
 
 	// screed, err := ioutil.ReadFile("example_screed.txt")
 	// check(err)
