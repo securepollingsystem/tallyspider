@@ -59,7 +59,7 @@ func EncodeToString(chunks ...[]byte) string {
 	return stringSum
 }
 
-func DeserializeScreed(screedString string) (*Screed, error, errorcause string) {
+func DeserializeScreed(screedString string) (*Screed, error, string) {
 	screedRegExp, err := regexp.Compile(screedPrefix + `[\s\S]+?` + screedSuffix)
 	if err != nil {
 		return nil, err, "regexp.Compile(screedPrefix + `[\\s\\S]+?` + screedSuffix)"
