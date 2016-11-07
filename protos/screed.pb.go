@@ -13,8 +13,12 @@ It has these top-level messages:
 */
 package securepollingsystem
 
-import proto "github.com/golang/protobuf/proto"
-import math "math"
+import (
+	"errors"
+	"math"
+
+	"github.com/golang/protobuf/proto"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -61,4 +65,25 @@ func (m *Screed) GetRegistrarPubKey() string {
 }
 
 func init() {
+}
+
+func (m *Screed) Valid() error {
+	if m == nil {
+		return errors.New("*Screed is nil")
+	}
+
+	if m.ScreedSig == nil {
+		return errors.New("screed.ScreedSig is nil")
+	}
+	if m.VoterPubKey == nil {
+		return errors.New("screed.VoterPubKey is nil")
+	}
+	if m.RegistrarSig == nil {
+		return errors.New("screed.RegistrarSig is nil")
+	}
+	if m.RegistrarPubKey == nil {
+		return errors.New("screed.RegistrarPubKey is nil")
+	}
+
+	return nil
 }
