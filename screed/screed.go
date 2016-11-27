@@ -13,12 +13,49 @@ import (
 	"github.com/securepollingsystem/tallyspider/securepollingsystem"
 )
 
+var (
+	emptyPubKey = btcec.PublicKey{}
+	emptySig    = btcec.Signature{}
+)
+
 type Screed struct {
 	screedText      string
 	screedSig       btcec.Signature
 	voterPubKey     btcec.PublicKey
 	registrarSig    btcec.Signature
 	registrarPubKey btcec.PublicKey
+}
+
+func (s *Screed) ScreedText() string {
+	return s.screedText
+}
+
+func (s *Screed) ScreedSig() *btcec.Signature {
+	if s.screedSig == emptySig {
+		return nil
+	}
+	return &s.screedSig
+}
+
+func (s *Screed) VoterPubKey() *btcec.PublicKey {
+	if s.voterPubKey == emptyPubKey {
+		return nil
+	}
+	return &s.voterPubKey
+}
+
+func (s *Screed) RegistrarSig() *btcec.Signature {
+	if s.registrarSig == emptySig {
+		return nil
+	}
+	return &s.registrarSig
+}
+
+func (s *Screed) RegistrarPubKey() *btcec.PublicKey {
+	if s.registrarPubKey == emptyPubKey {
+		return nil
+	}
+	return &s.registrarPubKey
 }
 
 func NewScreed(screedText string, screedSig btcec.Signature, pubKey btcec.PublicKey, pubKeySig btcec.Signature, regPubKey btcec.PublicKey) *Screed {
@@ -113,4 +150,30 @@ func (screed *Screed) Serialize() (string, error) {
 	screedStr := securepollingsystem.ScreedPrefix + "\n" + screed.screedText + "\n" + securepollingsystem.ScreedSuffix + "\n" + securepollingsystem.ScreedSigPrefix + "\n" + payload + "\n" + securepollingsystem.ScreedSigSuffix
 
 	return screedStr, nil
+}
+
+func (s *Screed) Valid() error {
+	// TODO: Add cryptographic checks
+
+	if s == nil {
+		return errors.New("*Screed is nil")
+	}
+
+	if s.ScreedText() == "" {
+		return errors.New("screed.ScreedText is empty")
+	}
+	if s.ScreedSig() == nil {
+		return errors.New("screed.ScreedSig is nil")
+	}
+	if s.VoterPubKey() == nil {
+		return errors.New("screed.VoterPubKey is nil")
+	}
+	if s.RegistrarSig() == nil {
+		return errors.New("screed.RegistrarSig is nil")
+	}
+	if s.RegistrarPubKey() == nil {
+		return errors.New("screed.RegistrarPubKey is nil")
+	}
+
+	return nil
 }
