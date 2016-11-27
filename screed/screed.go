@@ -10,7 +10,7 @@ import (
 
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/golang/protobuf/proto"
-	securepollingsystem "github.com/securepollingsystem/tallyspider/protos"
+	"github.com/securepollingsystem/tallyspider/securepollingsystem"
 )
 
 type Screed struct {
