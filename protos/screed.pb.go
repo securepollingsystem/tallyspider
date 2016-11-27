@@ -14,6 +14,7 @@ It has these top-level messages:
 package securepollingsystem
 
 import (
+	"encoding/base64"
 	"errors"
 	"math"
 
@@ -23,6 +24,15 @@ import (
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
 var _ = math.Inf
+
+var (
+	ScreedPrefix        = `-----BEGIN SPS SCREED TXT-----`
+	ScreedSuffix        = `-----END SPS TXT SCREED-----`
+	ScreedSigPrefix     = `-----BEGIN SPS SCREED SIG-----`
+	ScreedSigSuffix     = `-----END SPS SCREED SIG-----`
+	SerializedSigLength = 71
+	SerializedKeyLength = 33
+)
 
 type Screed struct {
 	ScreedSig        *string `protobuf:"bytes,1,req,name=screedSig" json:"screedSig,omitempty"`
@@ -86,4 +96,14 @@ func (m *Screed) Valid() error {
 	}
 
 	return nil
+}
+
+func EncodeToString(chunks ...[]byte) string {
+	var stringSum string
+
+	for _, chunk := range chunks {
+		stringSum = stringSum + base64.StdEncoding.EncodeToString(chunk)
+	}
+
+	return stringSum
 }
